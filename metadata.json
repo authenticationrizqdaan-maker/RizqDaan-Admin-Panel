@@ -1,0 +1,9 @@
+{
+  "name": "RizqDaan",
+  "description": "A multi-vendor business, service, and product listing platform designed for local sellers and service providers in Pakistani cities, enabling them to connect with customers easily.",
+  "requestFramePermissions": [
+    "geolocation",
+    "camera",
+    "microphone"
+  ]
+}

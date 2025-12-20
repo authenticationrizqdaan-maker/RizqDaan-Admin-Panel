@@ -1,0 +1,70 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <meta name="theme-color" content="#002f34" />
+  <link rel="manifest" href="/manifest.json" />
+  <title>RizqDaan - Local Business Listings</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            primary: {
+              DEFAULT: '#002f34', // Dark Teal
+              light: '#f7f8f9',   // Light Gray BG
+              dark: '#001a1d',    // Darker Teal
+            },
+            secondary: '#64748B', // A neutral gray for secondary text/icons
+            accent: {
+              blue: '#3A77FF',
+              yellow: '#FFC800',
+              teal: '#23E5DB',
+            },
+            dark: {
+              bg: '#18181B',
+              surface: '#27272A',
+              text: '#E4E4E7',
+              primary: '#004a52', 
+            }
+          },
+          fontFamily: {
+            poppins: ['Poppins', 'sans-serif'],
+          }
+        }
+      }
+    }
+  </script>
+<script type="importmap">
+{
+  "imports": {
+    "react/": "https://aistudiocdn.com/react@^19.2.0/",
+    "react": "https://aistudiocdn.com/react@^19.2.0",
+    "@google/genai": "https://aistudiocdn.com/@google/genai@^1.29.1",
+    "react-dom/": "https://aistudiocdn.com/react-dom@^19.2.0/",
+    "recharts": "https://aistudiocdn.com/recharts@^3.4.1",
+    "firebase/app": "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js",
+    "firebase/auth": "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js",
+    "firebase/firestore": "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js",
+    "firebase/storage": "https://www.gstatic.com/firebasejs/10.8.0/firebase-storage.js",
+    "firebase/": "https://esm.sh/firebase@^12.7.0/",
+    "vite": "https://esm.sh/vite@^7.3.0",
+    "@vitejs/plugin-react": "https://esm.sh/@vitejs/plugin-react@^5.1.2",
+    "@capacitor/cli": "https://esm.sh/@capacitor/cli@^8.0.0"
+  }
+}
+</script>
+<link rel="stylesheet" href="/index.css">
+</head>
+<body class="bg-primary-light dark:bg-dark-bg font-poppins antialiased">
+  <div id="root"></div>
+<script type="module" src="/index.tsx"></script>
+</body>
+</html>
