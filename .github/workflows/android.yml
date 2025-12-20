@@ -1,0 +1,80 @@
+
+name: Build Android Apps (User & Admin)
+
+on:
+  push:
+    branches: [ main ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Source
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'zulu'
+          java-version: '17'
+
+      - name: Install Dependencies
+        run: npm install
+
+      # --- 1. BUILD USER APK ---
+      - name: Build User Web Assets
+        run: npm run build
+        env:
+          API_KEY: ${{ secrets.API_KEY }}
+          IS_ADMIN_APP: false
+
+      - name: Initialize Android Platform
+        run: |
+          npx cap add android || true
+          mkdir -p assets
+          cp icon.png assets/icon.png || true
+          npx cap sync android
+          npx capacitor-assets generate --android
+
+      - name: Inject Permissions
+        run: |
+          MANIFEST_PATH="android/app/src/main/AndroidManifest.xml"
+          sed -i '/<\/manifest>/i \    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />\n    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />\n    <uses-feature android:name="android.hardware.location.gps" />\n    <uses-permission android:name="android.permission.CAMERA" />' $MANIFEST_PATH
+
+      - name: Build User APK
+        run: |
+          cd android
+          chmod +x gradlew
+          ./gradlew assembleDebug
+          mv app/build/outputs/apk/debug/app-debug.apk ../RizqDaan-User.apk
+
+      # --- 2. BUILD ADMIN APK ---
+      - name: Build Admin Web Assets
+        run: npm run build:admin
+        env:
+          API_KEY: ${{ secrets.API_KEY }}
+          IS_ADMIN_APP: true
+
+      - name: Sync Admin Assets to Android
+        run: npx cap sync android
+
+      - name: Build Admin APK
+        run: |
+          cd android
+          ./gradlew assembleDebug
+          mv app/build/outputs/apk/debug/app-debug.apk ../RizqDaan-Admin.apk
+
+      # --- 3. UPLOAD BOTH ---
+      - name: Upload APKs
+        uses: actions/upload-artifact@v4
+        with:
+          name: RizqDaan-Dual-APKs
+          path: |
+            RizqDaan-User.apk
+            RizqDaan-Admin.apk
