@@ -49,6 +49,21 @@ export interface Listing {
   status?: 'active' | 'draft' | 'pending' | 'rejected' | 'sold' | 'expired';
 }
 
+/**
+ * Added to ensure consistency with root types.ts
+ */
+export interface HomeBanner {
+    id: string;
+    title: string;
+    subtitle: string;
+    color: string; 
+    icon: string; 
+    imageUrl?: string; 
+    link?: string; 
+    isActive: boolean;
+    order: number;
+}
+
 export interface SubCategory {
   id: string;
   name: string;
@@ -66,6 +81,39 @@ export interface Vendor {
   name: string;
   profilePictureUrl: string;
   memberSince: string;
+}
+
+/**
+ * Added Help Center types to ensure consistency with root types.ts
+ */
+export interface HelpCategory {
+    id: string;
+    title: string;
+    icon: string; 
+    order: number;
+    isActive: boolean;
+}
+
+export interface HelpTopic {
+    id: string;
+    categoryId: string;
+    title: string;
+    content: string;
+    order: number;
+    isActive: boolean;
+}
+
+/**
+ * Added Navigation and View types to ensure consistency with root types.ts
+ */
+export type AppView = 'home' | 'listings' | 'details' | 'vendor-dashboard' | 'auth' | 'account' | 'subcategories' | 'chats' | 'add-listing' | 'my-ads' | 'vendor-analytics' | 'favorites' | 'saved-searches' | 'edit-profile' | 'settings' | 'admin' | 'vendor-profile' | 'promote-business' | 'add-balance' | 'referrals' | 'wallet-history' | 'notifications' | 'help-center';
+
+export interface NavigatePayload {
+  listing?: Listing;
+  category?: Category;
+  query?: string;
+  targetUser?: { id: string; name: string };
+  targetVendorId?: string;
 }
 
 export interface Transaction {
@@ -198,6 +246,8 @@ export interface User {
       totalInvited: number;
       totalEarned: number;
   };
+  // FIX: Added memberSince property to User interface in src/types.ts
+  memberSince?: string;
 
   // Admin CRM
   adminNotes?: string; // Private notes for admin
