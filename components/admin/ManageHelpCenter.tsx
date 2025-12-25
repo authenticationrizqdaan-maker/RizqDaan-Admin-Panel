@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { db } from '../../firebaseConfig';
-import { collection, onSnapshot, doc, setDoc, deleteDoc, addDoc, query } from 'firebase/firestore';
+import { collection, onSnapshot, doc, setDoc, deleteDoc, addDoc, query, orderBy } from 'firebase/firestore';
 import { HelpCategory, HelpTopic } from '../../types';
 
 const ManageHelpCenter: React.FC = () => {
@@ -67,7 +67,7 @@ const ManageHelpCenter: React.FC = () => {
     };
 
     return (
-        <div className="space-y-8 animate-fade-in">
+        <div className="space-y-8">
             <div className="flex justify-between items-center">
                 <h2 className="text-3xl font-bold text-gray-800 dark:text-white">Manage Help Center</h2>
                 <div className="flex bg-gray-100 dark:bg-gray-800 p-1 rounded-xl">
@@ -75,7 +75,7 @@ const ManageHelpCenter: React.FC = () => {
                         onClick={() => { setActiveTab('categories'); setIsEditing(null); }}
                         className={`px-4 py-2 text-sm font-bold rounded-lg transition-all ${activeTab === 'categories' ? 'bg-white dark:bg-dark-surface shadow text-primary' : 'text-gray-500'}`}
                     >
-                        Level 1: Main Points
+                        Level 1: Categories
                     </button>
                     <button 
                         onClick={() => { setActiveTab('topics'); setIsEditing(null); }}
@@ -92,26 +92,17 @@ const ManageHelpCenter: React.FC = () => {
                     <div className="bg-white dark:bg-dark-surface p-6 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 h-fit">
                         <h3 className="font-bold text-lg mb-4 dark:text-white">{isEditing ? 'Edit Category' : 'New Category'}</h3>
                         <form onSubmit={handleSaveCategory} className="space-y-4">
-                            <div>
-                                <label className="block text-xs font-bold text-gray-400 mb-1">Title</label>
-                                <input placeholder="e.g. Payments Help" className="w-full p-2 border rounded dark:bg-gray-700 dark:text-white" value={catForm.title} onChange={e => setCatForm({...catForm, title: e.target.value})} required />
-                            </div>
+                            <input placeholder="Title (e.g. Payments)" className="w-full p-2 border rounded dark:bg-gray-700 dark:text-white" value={catForm.title} onChange={e => setCatForm({...catForm, title: e.target.value})} required />
                             <div className="flex gap-2">
-                                <div className="flex-1">
-                                    <label className="block text-xs font-bold text-gray-400 mb-1">Emoji Icon</label>
-                                    <input placeholder="Emoji" className="w-full p-2 border rounded text-center text-xl dark:bg-gray-700" value={catForm.icon} onChange={e => setCatForm({...catForm, icon: e.target.value})} maxLength={2} />
-                                </div>
-                                <div className="flex-1">
-                                    <label className="block text-xs font-bold text-gray-400 mb-1">Order</label>
-                                    <input type="number" className="w-full p-2 border rounded dark:bg-gray-700 dark:text-white" value={catForm.order} onChange={e => setCatForm({...catForm, order: Number(e.target.value)})} />
-                                </div>
+                                <input placeholder="Icon Emoji" className="w-20 p-2 border rounded text-center text-xl dark:bg-gray-700" value={catForm.icon} onChange={e => setCatForm({...catForm, icon: e.target.value})} maxLength={2} />
+                                <input type="number" placeholder="Order" className="flex-grow p-2 border rounded dark:bg-gray-700 dark:text-white" value={catForm.order} onChange={e => setCatForm({...catForm, order: Number(e.target.value)})} />
                             </div>
                             <label className="flex items-center gap-2 text-sm dark:text-gray-300">
                                 <input type="checkbox" checked={catForm.isActive} onChange={e => setCatForm({...catForm, isActive: e.target.checked})} />
                                 Category is Live
                             </label>
-                            <button type="submit" className="w-full py-2 bg-primary text-white font-bold rounded-lg">{isEditing ? 'Update' : 'Add Category'}</button>
-                            {isEditing && <button type="button" onClick={() => setIsEditing(null)} className="w-full text-sm text-gray-500 mt-2">Cancel Edit</button>}
+                            <button type="submit" className="w-full py-2 bg-primary text-white font-bold rounded-lg">{isEditing ? 'Update' : 'Add Level 1 Point'}</button>
+                            {isEditing && <button type="button" onClick={() => setIsEditing(null)} className="w-full text-sm text-gray-500">Cancel Edit</button>}
                         </form>
                     </div>
 
@@ -141,59 +132,46 @@ const ManageHelpCenter: React.FC = () => {
                     <div className="bg-white dark:bg-dark-surface p-6 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 h-fit sticky top-6">
                         <h3 className="font-bold text-lg mb-4 dark:text-white">{isEditing ? 'Edit Topic' : 'New Topic'}</h3>
                         <form onSubmit={handleSaveTopic} className="space-y-4">
-                            <div>
-                                <label className="block text-xs font-bold text-gray-400 mb-1">Parent Category</label>
-                                <select className="w-full p-2 border rounded dark:bg-gray-700 dark:text-white" value={topicForm.categoryId} onChange={e => setTopicForm({...topicForm, categoryId: e.target.value})} required>
-                                    <option value="">Select Category</option>
-                                    {categories.map(c => <option key={c.id} value={c.id}>{c.title}</option>)}
-                                </select>
-                            </div>
-                            <div>
-                                <label className="block text-xs font-bold text-gray-400 mb-1">Topic Title (Question)</label>
-                                <input placeholder="How to pay?" className="w-full p-2 border rounded dark:bg-gray-700 dark:text-white" value={topicForm.title} onChange={e => setTopicForm({...topicForm, title: e.target.value})} required />
-                            </div>
-                            <div>
-                                <label className="block text-xs font-bold text-gray-400 mb-1">Detailed Content (Answer)</label>
-                                <textarea placeholder="Write full instructions here..." className="w-full p-2 border rounded h-40 dark:bg-gray-700 dark:text-white text-sm" value={topicForm.content} onChange={e => setTopicForm({...topicForm, content: e.target.value})} required />
-                            </div>
+                            <select className="w-full p-2 border rounded dark:bg-gray-700 dark:text-white" value={topicForm.categoryId} onChange={e => setTopicForm({...topicForm, categoryId: e.target.value})} required>
+                                <option value="">Select Category</option>
+                                {categories.map(c => <option key={c.id} value={c.id}>{c.title}</option>)}
+                            </select>
+                            <input placeholder="Topic Title" className="w-full p-2 border rounded dark:bg-gray-700 dark:text-white" value={topicForm.title} onChange={e => setTopicForm({...topicForm, title: e.target.value})} required />
+                            <textarea placeholder="Help Content (Level 3 Dropdown Text)" className="w-full p-2 border rounded h-32 dark:bg-gray-700 dark:text-white" value={topicForm.content} onChange={e => setTopicForm({...topicForm, content: e.target.value})} required />
                             <div className="flex items-center gap-4">
                                 <div className="flex-1">
-                                    <label className="text-xs font-bold text-gray-400 block mb-1">Order</label>
+                                    <label className="text-xs font-bold text-gray-400 block mb-1">Display Order</label>
                                     <input type="number" className="w-full p-2 border rounded dark:bg-gray-700 dark:text-white" value={topicForm.order} onChange={e => setTopicForm({...topicForm, order: Number(e.target.value)})} />
                                 </div>
                                 <div className="pt-5">
-                                    <label className="flex items-center gap-2 text-sm dark:text-gray-300 font-bold">
+                                    <label className="flex items-center gap-2 text-sm dark:text-gray-300">
                                         <input type="checkbox" checked={topicForm.isActive} onChange={e => setTopicForm({...topicForm, isActive: e.target.checked})} />
                                         Is Live
                                     </label>
                                 </div>
                             </div>
-                            <button type="submit" className="w-full py-3 bg-primary text-white font-bold rounded-lg shadow-md">{isEditing ? 'Update Topic' : 'Publish Topic'}</button>
-                            {isEditing && <button type="button" onClick={() => setIsEditing(null)} className="w-full text-sm text-gray-500 mt-2">Cancel Edit</button>}
+                            <button type="submit" className="w-full py-2 bg-primary text-white font-bold rounded-lg">{isEditing ? 'Update Topic' : 'Publish Topic'}</button>
+                            {isEditing && <button type="button" onClick={() => setIsEditing(null)} className="w-full text-sm text-gray-500">Cancel Edit</button>}
                         </form>
                     </div>
 
                     <div className="md:col-span-2 space-y-6">
                         {categories.map(cat => (
-                            <div key={cat.id} className="bg-gray-50/50 dark:bg-gray-900/20 p-4 rounded-2xl border border-gray-100 dark:border-gray-800">
-                                <h4 className="text-xs font-black uppercase tracking-widest text-primary mb-3 px-2 flex items-center gap-2">
-                                    <span>{cat.icon}</span> {cat.title} Topics
-                                </h4>
-                                <div className="space-y-2">
-                                    {topics.filter(t => t.categoryId === cat.id).length === 0 && <p className="text-xs italic text-gray-400 px-2 py-4">No topics found for this category.</p>}
-                                    {topics.filter(t => t.categoryId === cat.id).map(topic => (
-                                        <div key={topic.id} className="flex items-center justify-between p-4 bg-white dark:bg-dark-surface rounded-xl border border-gray-100 dark:border-gray-700 shadow-sm group">
-                                            <div className="flex-grow">
-                                                <h5 className="font-bold dark:text-white text-sm">{topic.title}</h5>
-                                                <p className="text-[10px] text-gray-400 truncate max-w-[300px] mt-1">{topic.content}</p>
-                                            </div>
-                                            <div className="flex gap-2 ml-4">
-                                                <button onClick={() => { setIsEditing(topic.id); setTopicForm(topic); }} className="p-1.5 text-blue-600 hover:bg-blue-50 rounded">Edit</button>
-                                                <button onClick={() => handleDelete('help_topics', topic.id)} className="p-1.5 text-red-600 hover:bg-red-50 rounded">Delete</button>
-                                            </div>
+                            <div key={cat.id} className="space-y-2">
+                                <h4 className="text-xs font-black uppercase tracking-widest text-gray-400 px-2">{cat.title} Topics</h4>
+                                {topics.filter(t => t.categoryId === cat.id).length === 0 && <p className="text-xs italic text-gray-500 px-2">No topics yet.</p>}
+                                {topics.filter(t => t.categoryId === cat.id).map(topic => (
+                                    <div key={topic.id} className="flex items-center justify-between p-4 bg-white dark:bg-dark-surface rounded-xl border border-gray-100 dark:border-gray-700 shadow-sm">
+                                        <div className="flex-grow">
+                                            <h5 className="font-bold dark:text-white">{topic.title}</h5>
+                                            <p className="text-[10px] text-gray-500 truncate max-w-[200px]">{topic.content}</p>
                                         </div>
-                                    ))}
-                                </div>
+                                        <div className="flex gap-2">
+                                            <button onClick={() => { setIsEditing(topic.id); setTopicForm(topic); }} className="p-1.5 text-blue-600 hover:bg-blue-50 rounded">Edit</button>
+                                            <button onClick={() => handleDelete('help_topics', topic.id)} className="p-1.5 text-red-600 hover:bg-red-50 rounded">Delete</button>
+                                        </div>
+                                    </div>
+                                ))}
                             </div>
                         ))}
                     </div>
