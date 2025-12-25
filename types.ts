@@ -1,3 +1,4 @@
+
 import type { ReactElement } from 'react';
 
 export enum ListingType {
@@ -189,6 +190,8 @@ export interface User {
       totalInvited: number;
       totalEarned: number;
   };
+  // FIX: Added memberSince property to User interface
+  memberSince?: string;
   adminNotes?: string; 
   wallet?: {
     balance: number;
