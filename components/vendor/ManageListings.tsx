@@ -29,7 +29,6 @@ const ManageListings: React.FC<ManageListingsProps> = ({ user, onEdit, onPreview
       }
 
       setLoading(true);
-      // Removed orderBy from query to fix "Missing Index" error
       const q = query(
           collection(db, "listings"),
           where("vendorId", "==", user.id)
@@ -37,14 +36,11 @@ const ManageListings: React.FC<ManageListingsProps> = ({ user, onEdit, onPreview
 
       const unsubscribe = onSnapshot(q, (snapshot) => {
           let items = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Listing));
-          
-          // Client-side sort: Newest first (Bypasses need for Composite Index)
           items.sort((a, b) => {
               const dateA = new Date(a.createdAt || 0).getTime();
               const dateB = new Date(b.createdAt || 0).getTime();
               return dateB - dateA;
           });
-
           setMyListings(items);
           setLoading(false);
       }, (err) => {
@@ -63,13 +59,19 @@ const ManageListings: React.FC<ManageListingsProps> = ({ user, onEdit, onPreview
       return true;
   });
 
-  const handleDeleteClick = (listingId: string) => {
-      if (confirmDeleteId === listingId) {
-          performDelete(listingId);
+  const handleDeleteClick = (listing: Listing) => {
+      // RULE: Prevent deletion of featured listings
+      if (listing.isPromoted) {
+          alert("❌ Cannot Delete: This listing is currently FEATURED. Please go to the 'Promotions' section and stop/delete the campaign first to receive any applicable refund.");
+          return;
+      }
+
+      if (confirmDeleteId === listing.id) {
+          performDelete(listing.id);
       } else {
-          setConfirmDeleteId(listingId);
+          setConfirmDeleteId(listing.id);
           setTimeout(() => {
-              setConfirmDeleteId(prev => prev === listingId ? null : prev);
+              setConfirmDeleteId(prev => prev === listing.id ? null : prev);
           }, 3000);
       }
   };
@@ -105,7 +107,6 @@ const ManageListings: React.FC<ManageListingsProps> = ({ user, onEdit, onPreview
           </div>
       )}
 
-      {/* Tabs */}
       <div className="flex flex-wrap gap-2 mb-6 border-b border-gray-200 dark:border-gray-700 pb-2">
           {['all', 'live', 'draft', 'featured'].map((tab) => (
               <button
@@ -134,63 +135,52 @@ const ManageListings: React.FC<ManageListingsProps> = ({ user, onEdit, onPreview
           ))}
       </div>
 
-      {loading && myListings.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-20">
-              <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-primary mb-4"></div>
-              <p className="text-gray-500">Loading...</p>
+      <div className="space-y-6">
+          {filteredListings.map(listing => (
+          <div key={listing.id} className={`flex flex-col p-4 bg-white dark:bg-dark-surface rounded-xl shadow-md border ${listing.isPromoted ? 'border-yellow-400 ring-1 ring-yellow-400' : 'border-gray-200 dark:border-gray-700'}`}>
+              <div className="flex flex-row gap-4 mb-4">
+                  <div className="relative w-24 h-24 flex-shrink-0">
+                        <img src={listing.imageUrl} alt={listing.title} className="w-full h-full rounded-lg object-cover bg-gray-200" />
+                        {listing.isPromoted && <span className="absolute -top-2 -left-2 bg-yellow-400 text-white text-[10px] font-bold px-2 py-0.5 rounded-full shadow-sm">FEATURED</span>}
+                  </div>
+                  <div className="flex-grow">
+                      <div className="flex justify-between items-start">
+                            <div>
+                              <h4 className="font-bold text-lg text-gray-800 dark:text-white line-clamp-1">{listing.title}</h4>
+                              <p className="text-sm text-gray-500 dark:text-gray-400">Rs.{listing.price}</p>
+                            </div>
+                            <button onClick={() => onPreview(listing)} className="text-xs text-primary hover:underline">Preview &rarr;</button>
+                      </div>
+                      <div className="grid grid-cols-4 gap-2 mt-3">
+                            <div className="text-center bg-gray-50 dark:bg-gray-700 rounded p-1">
+                                <span className="block text-[10px] text-gray-400 uppercase">Views</span>
+                                <span className="font-bold text-primary dark:text-white text-xs">{listing.views || 0}</span>
+                            </div>
+                            <div className="text-center bg-gray-50 dark:bg-gray-700 rounded p-1">
+                                <span className="block text-[10px] text-gray-400 uppercase">Calls</span>
+                                <span className="font-bold text-blue-500 text-xs">{listing.calls || 0}</span>
+                            </div>
+                            <div className="text-center bg-gray-50 dark:bg-gray-700 rounded p-1">
+                                <span className="block text-[10px] text-gray-400 uppercase">Rating</span>
+                                <span className="font-bold text-yellow-500 text-xs">{listing.rating.toFixed(1)}</span>
+                            </div>
+                            <div className="text-center bg-gray-50 dark:bg-gray-700 rounded p-1">
+                                <span className="block text-[10px] text-gray-400 uppercase">Likes</span>
+                                <span className="font-bold text-red-500 text-xs">{listing.likes || 0}</span>
+                            </div>
+                      </div>
+                  </div>
+              </div>
+              <div className="grid grid-cols-3 gap-3 border-t border-gray-100 dark:border-gray-700 pt-3">
+                  <button onClick={() => !listing.isPromoted && onPromote(listing)} className={`px-3 py-2 text-xs font-bold rounded-lg transition-colors ${listing.isPromoted ? 'bg-yellow-400 text-white cursor-default' : 'bg-yellow-50 text-yellow-700 hover:bg-yellow-100'}`}>{listing.isPromoted ? 'Featured' : 'Promote'}</button>
+                  <button onClick={() => onEdit(listing)} className="px-3 py-2 text-xs font-bold rounded-lg bg-blue-50 text-blue-700 hover:bg-blue-100 transition-colors">Edit</button>
+                  <button onClick={() => handleDeleteClick(listing)} className={`px-3 py-2 text-xs font-bold rounded-lg transition-all ${confirmDeleteId === listing.id ? 'bg-red-600 text-white' : 'bg-red-50 text-red-700'}`}>
+                      {deletingId === listing.id ? '...' : (confirmDeleteId === listing.id ? 'Confirm?' : 'Delete')}
+                  </button>
+              </div>
           </div>
-      ) : filteredListings.length === 0 ? (
-           <div className="text-center py-10 bg-gray-50 dark:bg-gray-800 rounded-lg">
-              <p className="text-gray-500 dark:text-gray-400">No items found here.</p>
-           </div>
-      ) : (
-        <div className="space-y-6">
-            {filteredListings.map(listing => (
-            <div key={listing.id} className={`flex flex-col p-4 bg-white dark:bg-dark-surface rounded-xl shadow-md border ${listing.isPromoted ? 'border-yellow-400 ring-1 ring-yellow-400' : 'border-gray-200 dark:border-gray-700'}`}>
-                <div className="flex flex-row gap-4 mb-4">
-                    <div className="relative w-24 h-24 flex-shrink-0">
-                         <img src={listing.imageUrl} alt={listing.title} className="w-full h-full rounded-lg object-cover bg-gray-200" />
-                         {listing.isPromoted && <span className="absolute -top-2 -left-2 bg-yellow-400 text-white text-[10px] font-bold px-2 py-0.5 rounded-full shadow-sm">FEATURED</span>}
-                    </div>
-                    <div className="flex-grow">
-                        <div className="flex justify-between items-start">
-                             <div>
-                                <h4 className="font-bold text-lg text-gray-800 dark:text-white line-clamp-1">{listing.title}</h4>
-                                <p className="text-sm text-gray-500 dark:text-gray-400">Rs.{listing.price}</p>
-                             </div>
-                             <button onClick={() => onPreview(listing)} className="text-xs text-primary hover:underline">Preview &rarr;</button>
-                        </div>
-                        <div className="grid grid-cols-4 gap-2 mt-3">
-                             <div className="text-center bg-gray-50 dark:bg-gray-700 rounded p-1">
-                                 <span className="block text-[10px] text-gray-400 uppercase">Views</span>
-                                 <span className="font-bold text-primary dark:text-white text-xs">{listing.views || 0}</span>
-                             </div>
-                             <div className="text-center bg-gray-50 dark:bg-gray-700 rounded p-1">
-                                 <span className="block text-[10px] text-gray-400 uppercase">Calls</span>
-                                 <span className="font-bold text-blue-500 text-xs">{listing.calls || 0}</span>
-                             </div>
-                             <div className="text-center bg-gray-50 dark:bg-gray-700 rounded p-1">
-                                 <span className="block text-[10px] text-gray-400 uppercase">Rating</span>
-                                 <span className="font-bold text-yellow-500 text-xs">{listing.rating.toFixed(1)}</span>
-                             </div>
-                             <div className="text-center bg-gray-50 dark:bg-gray-700 rounded p-1">
-                                 <span className="block text-[10px] text-gray-400 uppercase">Likes</span>
-                                 <span className="font-bold text-red-500 text-xs">{listing.likes || 0}</span>
-                             </div>
-                        </div>
-                    </div>
-                </div>
-                <div className="grid grid-cols-3 gap-3 border-t border-gray-100 dark:border-gray-700 pt-3">
-                    <button onClick={() => !listing.isPromoted && onPromote(listing)} className="px-3 py-2 text-xs font-bold rounded-lg bg-yellow-50 text-yellow-700 hover:bg-yellow-100 transition-colors">Promote</button>
-                    <button onClick={() => onEdit(listing)} className="px-3 py-2 text-xs font-bold rounded-lg bg-blue-50 text-blue-700 hover:bg-blue-100 transition-colors">Edit</button>
-                    <button onClick={() => handleDeleteClick(listing.id)} className={`px-3 py-2 text-xs font-bold rounded-lg transition-all ${confirmDeleteId === listing.id ? 'bg-red-600 text-white' : 'bg-red-50 text-red-700'}`}>
-                        {deletingId === listing.id ? '...' : (confirmDeleteId === listing.id ? 'Confirm?' : 'Delete')}
-                    </button>
-                </div>
-            </div>
-            ))}
-        </div>
-      )}
+          ))}
+      </div>
     </div>
   );
 };
