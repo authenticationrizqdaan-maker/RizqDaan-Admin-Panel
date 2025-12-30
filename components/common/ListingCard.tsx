@@ -1,6 +1,8 @@
 
-import React from 'react';
+import React, { useEffect } from 'react';
 import { Listing } from '../../types';
+import { db } from '../../firebaseConfig';
+import { collection, query, where, getDocs, updateDoc, increment, doc } from 'firebase/firestore';
 
 interface ListingCardProps {
   listing: Listing;
@@ -8,6 +10,74 @@ interface ListingCardProps {
 }
 
 const ListingCard: React.FC<ListingCardProps> = ({ listing, onViewDetails }) => {
+  // --- ANALYTICS LOGIC: IMPRESSION TRACKING (SYNCED) ---
+  useEffect(() => {
+    let isMounted = true;
+    if (db) {
+      const trackInteraction = async () => {
+        try {
+          // Rule: Always update total views on the listing first
+          const listingRef = doc(db, 'listings', listing.id);
+          await updateDoc(listingRef, { views: increment(1) });
+
+          // Rule: If promoted, also update the specific campaign impressions
+          if (listing.isPromoted) {
+            const q = query(
+              collection(db, 'campaigns'), 
+              where('listingId', '==', listing.id),
+              where('status', '==', 'active')
+            );
+            const snap = await getDocs(q);
+            if (isMounted && !snap.empty) {
+                const activeCampaignDoc = snap.docs[0];
+                const d = activeCampaignDoc.data();
+                const newImpr = (d.impressions || 0) + 1;
+                const clicks = d.clicks || 0;
+                const newCtr = Number(((clicks / newImpr) * 100).toFixed(2));
+
+                await updateDoc(activeCampaignDoc.ref, {
+                    impressions: increment(1),
+                    ctr: newCtr
+                });
+            }
+          }
+        } catch (e) {
+          console.warn("View tracking failed: ", e);
+        }
+      };
+      trackInteraction();
+    }
+    return () => { isMounted = false; };
+  }, [listing.id, listing.isPromoted]);
+
+  const handleCardClick = async () => {
+    if (listing.isPromoted && db) {
+      try {
+        const q = query(
+          collection(db, 'campaigns'), 
+          where('listingId', '==', listing.id),
+          where('status', '==', 'active')
+        );
+        const snap = await getDocs(q);
+        if (!snap.empty) {
+          const activeCampaignDoc = snap.docs[0];
+          const d = activeCampaignDoc.data();
+          const newClicks = (d.clicks || 0) + 1;
+          const impr = d.impressions || 1;
+          const newCtr = Number(((newClicks / impr) * 100).toFixed(2));
+
+          await updateDoc(activeCampaignDoc.ref, {
+            clicks: increment(1),
+            ctr: newCtr
+          });
+        }
+      } catch (e) {
+        console.warn("Analytics Click failed: ", e);
+      }
+    }
+    onViewDetails(listing);
+  };
+
   const StarRating = ({ rating, reviewsCount }: { rating: number, reviewsCount: number }) => {
     return (
       <div className="flex items-center gap-1">
@@ -27,9 +97,8 @@ const ListingCard: React.FC<ListingCardProps> = ({ listing, onViewDetails }) => 
   return (
     <div 
       className={`group bg-white dark:bg-dark-surface rounded-xl overflow-hidden shadow-sm border border-gray-100 dark:border-gray-800 hover:shadow-xl hover:-translate-y-1 transition-all duration-300 cursor-pointer flex flex-col relative ${listing.isPromoted ? 'ring-1 ring-accent-yellow/50' : ''}`}
-      onClick={() => onViewDetails(listing)}
+      onClick={handleCardClick}
     >
-      {/* Image Container with Fixed Aspect Ratio */}
       <div className="relative aspect-[4/3] overflow-hidden bg-gray-100 dark:bg-gray-900">
         <img 
           className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105" 
@@ -37,8 +106,6 @@ const ListingCard: React.FC<ListingCardProps> = ({ listing, onViewDetails }) => 
           alt={listing.title} 
           loading="lazy" 
         />
-        
-        {/* Badges Overlay */}
         <div className="absolute top-2 left-2 flex flex-col gap-1">
             {listing.isPromoted && (
                 <span className="bg-accent-yellow text-primary text-[9px] font-extrabold px-2 py-0.5 rounded shadow-sm flex items-center gap-1 uppercase tracking-tighter">
@@ -52,36 +119,25 @@ const ListingCard: React.FC<ListingCardProps> = ({ listing, onViewDetails }) => 
                 </span>
             )}
         </div>
-
-        {/* Type Badge (Bottom Left) */}
         <div className="absolute bottom-2 left-2">
              <span className="bg-black/40 backdrop-blur-sm text-white text-[8px] px-1.5 py-0.5 rounded font-medium uppercase tracking-widest">
                 {listing.category.split(' ')[0]}
              </span>
         </div>
       </div>
-      
-      {/* Content Area */}
       <div className="p-3 flex flex-col flex-grow">
-        {/* Price Row */}
         <div className="flex items-center justify-between mb-1">
             <p className="text-base font-bold text-primary dark:text-white">Rs. {listing.price.toLocaleString()}</p>
             <button className="text-gray-400 hover:text-red-500 transition-colors">
                 <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" /></svg>
             </button>
         </div>
-
-        {/* Original Price (if any) */}
         {listing.originalPrice && (
             <p className="text-[10px] text-gray-400 line-through -mt-1 mb-1">Rs. {listing.originalPrice.toLocaleString()}</p>
         )}
-
-        {/* Title - Fixed height with line clamp for alignment */}
         <h3 className="text-xs font-medium text-gray-700 dark:text-gray-200 leading-tight line-clamp-2 mb-3 min-h-[2.5rem]">
             {listing.title}
         </h3>
-        
-        {/* Footer info */}
         <div className="mt-auto border-t border-gray-50 dark:border-gray-800 pt-2 flex items-center justify-between">
             <StarRating rating={listing.rating} reviewsCount={listing.reviews?.length || 0} />
             <div className="flex items-center text-[10px] text-gray-400 gap-0.5 max-w-[50%]">
