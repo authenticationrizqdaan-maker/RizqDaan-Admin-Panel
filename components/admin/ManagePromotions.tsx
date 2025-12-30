@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { db } from '../../firebaseConfig';
-import { collection, onSnapshot, doc, query, writeBatch, getDoc, updateDoc, arrayUnion, setDoc } from 'firebase/firestore';
+import { collection, onSnapshot, doc, query, writeBatch, getDoc, updateDoc, arrayUnion, setDoc, increment } from 'firebase/firestore';
 import { AdCampaign, Transaction, User } from '../../types';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 
@@ -287,19 +287,69 @@ const ManagePromotions: React.FC<ManagePromotionsProps> = ({ users }) => {
     };
 
     const handleStopCampaign = async (id: string, listingId?: string) => {
-        if (!window.confirm("Stop this live ad?")) return;
+        const campaign = displayCampaigns.find(c => c.id === id);
+        if (!campaign) return;
+
+        if (!window.confirm("⚠️ STOP AD & REFUND?\nStopping this campaign now will return the budget for the REMAINING days to the vendor's wallet. The listing will immediately return to a regular status. Proceed?")) return;
         if (!db) return;
 
+        setProcessingId(id);
         try {
             const batch = writeBatch(db);
+            
+            // Refund calculation (Sync with logic used in VendorPromotions.tsx)
+            const now = new Date();
+            const end = new Date(campaign.endDate);
+            const diffMs = end.getTime() - now.getTime();
+            // Get remaining full days
+            const remainingDays = Math.max(0, Math.floor(diffMs / (1000 * 60 * 60 * 24)));
+            const dailyRate = campaign.totalCost / campaign.durationDays;
+            const refundAmount = Math.floor(remainingDays * dailyRate);
+
+            // 1. Process Wallet Refund
+            if (refundAmount > 0) {
+                const vendorRef = doc(db, 'users', campaign.vendorId);
+                const refundTx: Transaction = {
+                    id: `tx_adm_ref_${Date.now()}`,
+                    type: 'adjustment',
+                    amount: refundAmount,
+                    date: new Date().toISOString().split('T')[0],
+                    status: 'completed',
+                    description: `Admin Ad Refund: Stopped early (${campaign.listingTitle.substring(0, 15)}...)`
+                };
+                
+                batch.update(vendorRef, {
+                    "wallet.balance": increment(refundAmount),
+                    "wallet.totalSpend": increment(-refundAmount),
+                    walletHistory: arrayUnion(refundTx)
+                });
+            }
+
+            // 2. Mark Campaign as Completed
             const campaignRef = doc(db, 'campaigns', id);
-            batch.update(campaignRef, { status: 'completed' });
+            batch.update(campaignRef, { 
+                status: 'completed', 
+                endDate: new Date().toISOString() 
+            });
+
+            // 3. Remove Featured Status from Listing
             if (listingId) {
                 const listingRef = doc(db, 'listings', listingId);
                 batch.update(listingRef, { isPromoted: false });
             }
+
             await batch.commit();
+            alert(`✅ Ad stopped. Rs. ${refundAmount.toLocaleString()} has been refunded to the vendor.`);
         } catch (e: any) {
+            console.warn("Stop campaign fallback triggered:", e.message || String(e));
+            // Calculate refund for local cache update
+            const now = new Date();
+            const end = new Date(campaign.endDate);
+            const diffMs = end.getTime() - now.getTime();
+            const remainingDays = Math.max(0, Math.floor(diffMs / (1000 * 60 * 60 * 24)));
+            const dailyRate = campaign.totalCost / campaign.durationDays;
+            const refundAmount = Math.floor(remainingDays * dailyRate);
+
             updateLocalOverride(id, { status: 'completed' });
             if(listingId) {
                 const listingOverrides = JSON.parse(localStorage.getItem('demo_listings_overrides') || '{}');
@@ -307,7 +357,44 @@ const ManagePromotions: React.FC<ManagePromotionsProps> = ({ users }) => {
                 localStorage.setItem('demo_listings_overrides', safeStringify(listingOverrides));
                 window.dispatchEvent(new Event('listings_updated'));
             }
+
+            try {
+                const demoWallets = JSON.parse(localStorage.getItem('demo_user_wallets') || '{}');
+                const demoHistory = JSON.parse(localStorage.getItem('demo_user_history') || '{}');
+                const currentWallet = demoWallets[campaign.vendorId] || {};
+                
+                const userObj = users.find(u => u.id === campaign.vendorId);
+                const baseBalance = currentWallet.balance ?? (userObj?.wallet?.balance || 0);
+                const baseSpend = currentWallet.totalSpend ?? (userObj?.wallet?.totalSpend || 0);
+
+                demoWallets[campaign.vendorId] = {
+                    ...currentWallet,
+                    balance: baseBalance + refundAmount,
+                    totalSpend: Math.max(0, baseSpend - refundAmount)
+                };
+                
+                const refundTx: Transaction = {
+                    id: `tx_adm_ref_demo_${Date.now()}`,
+                    type: 'adjustment',
+                    amount: refundAmount,
+                    date: new Date().toISOString().split('T')[0],
+                    status: 'completed',
+                    description: `Admin Ad Refund (Demo): Stopped early`
+                };
+                
+                const userHistory = demoHistory[campaign.vendorId] || [];
+                userHistory.push(refundTx);
+                demoHistory[campaign.vendorId] = userHistory;
+
+                localStorage.setItem('demo_user_wallets', safeStringify(demoWallets));
+                localStorage.setItem('demo_user_history', safeStringify(demoHistory));
+                window.dispatchEvent(new Event('wallet_updated'));
+            } catch (localErr) {}
+
             window.dispatchEvent(new Event('campaigns_updated'));
+            alert(`✅ Ad stopped. Rs. ${refundAmount.toLocaleString()} refunded (Demo Mode).`);
+        } finally {
+            setProcessingId(null);
         }
     };
 
@@ -443,7 +530,9 @@ const ManagePromotions: React.FC<ManagePromotionsProps> = ({ users }) => {
                             <div className="p-4">
                                 <h4 className="font-bold text-gray-900 dark:text-white truncate mb-1">{ad.listingTitle}</h4>
                                 <div className="flex justify-between text-xs text-gray-500 mb-3"><span>{ad.impressions} Views</span><span>{ad.clicks} Clicks</span><span className="text-primary font-bold">CTR: {ad.ctr}%</span></div>
-                                <div className="flex gap-2 mt-3"><button className="flex-1 py-2 bg-gray-100 text-xs font-bold rounded">Extend</button><button onClick={() => handleStopCampaign(ad.id, ad.listingId)} className="flex-1 py-2 bg-red-50 text-red-600 text-xs font-bold rounded">Stop</button></div>
+                                <div className="flex gap-2 mt-3"><button className="flex-1 py-2 bg-gray-100 text-xs font-bold rounded">Extend</button><button onClick={() => handleStopCampaign(ad.id, ad.listingId)} disabled={processingId === ad.id} className="flex-1 py-2 bg-red-50 text-red-600 text-xs font-bold rounded flex items-center justify-center gap-1">
+                                    {processingId === ad.id ? <span className="animate-spin h-3 w-3 border border-red-600 border-t-transparent rounded-full"></span> : 'Stop'}
+                                </button></div>
                             </div>
                         </div>
                     ))}
